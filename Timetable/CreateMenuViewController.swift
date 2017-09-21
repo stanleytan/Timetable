@@ -8,46 +8,6 @@
 
 import UIKit
 
-class CreateMenuSegueFromLeft: UIStoryboardSegue
-{
-    override func perform()
-    {
-        self.source.view.endEditing(true)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: {
-            let src = self.source
-            let dst = self.destination
-            
-            src.view.superview?.insertSubview(dst.view, aboveSubview: src.view)
-            dst.view.superview?.insertSubview(src.view, aboveSubview: dst.view)
-            dst.view.transform = CGAffineTransform(translationX: -src.view.frame.size.width / 2, y: 0)
-            src.view.transform = CGAffineTransform(translationX: 0, y: 0)
-            
-            UIView.animate(withDuration: 0.3, delay: 0.0, options: UIViewAnimationOptions.curveEaseOut, animations: { dst.view.transform = CGAffineTransform(translationX: 0, y: 0); src.view.transform = CGAffineTransform(translationX: src.view.frame.size.width, y: 0) }, completion: { finished in src.present(dst, animated: false, completion: nil) })
-        })
-        
-    }
-}
-
-class CreateMenuSegueFromRight: UIStoryboardSegue
-{
-    override func perform()
-    {
-        self.source.view.endEditing(true)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: {
-            let src = self.source
-            let dst = self.destination
-        
-            src.view.superview?.insertSubview(dst.view, aboveSubview: src.view)
-            dst.view.transform = CGAffineTransform(translationX: src.view.frame.size.width, y: 0)
-            src.view.transform = CGAffineTransform(translationX: 0, y: 0)
-        
-            UIView.animate(withDuration: 0.3, delay: 0.0, options: UIViewAnimationOptions.curveEaseOut, animations: { dst.view.transform = CGAffineTransform(translationX: 0, y: 0); src.view.transform = CGAffineTransform(translationX: -src.view.frame.size.width / 2, y: 0) }, completion: { finished in src.present(dst, animated: false, completion: nil) })
-        })
-    }
-}
-
 class TextField: UITextField {
     
     let padding = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0);
@@ -62,6 +22,13 @@ class TextField: UITextField {
     
     override func editingRect(forBounds bounds: CGRect) -> CGRect {
         return UIEdgeInsetsInsetRect(bounds, padding)
+    }
+    
+    override public func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(copy(_:)) || action == #selector(paste(_:)) || action == #selector(cut(_:)) || action == #selector(select(_:)) || action == #selector(selectAll(_:)) || action == #selector(delete(_:)) {
+            return false
+        }
+        return super.canPerformAction(action, withSender: sender)
     }
 }
 
@@ -83,8 +50,9 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
     @IBOutlet weak var scheduleIDTextField: UITextField!
     @IBOutlet weak var schedulePasswordTextField: UITextField!
     @IBOutlet weak var confirmPasswordTextField: UITextField!
-    @IBOutlet weak var progressBar: UIProgressView!
     @IBOutlet weak var createScheduleButton: UIButton!
+    @IBOutlet weak var progressBar: UIProgressView!
+    @IBOutlet weak var errorLabel: UILabel!
     
     var textFieldsCompletion : [Bool] = []
     var scheduleDate : String?
@@ -94,7 +62,6 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
         super.viewDidLoad()
 
         // Do any additional setup after loading the view.
-        
         scheduleNameTextField.delegate = self
         scheduleNameTextField.tag = 0
         scheduleNameTextField.attributedPlaceholder = NSAttributedString(string: "Schedule Name", attributes: [NSForegroundColorAttributeName: UIColor(white: 1, alpha: 0.4)])
@@ -118,19 +85,15 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
         confirmPasswordTextField.tag = 4
         confirmPasswordTextField.attributedPlaceholder = NSAttributedString(string: "Confirm Password", attributes: [NSForegroundColorAttributeName: UIColor(white: 1, alpha: 0.4)])
         confirmPasswordTextField.addTarget(self, action: #selector(textFieldDidChange(_:)), for: .editingChanged)
-        createScheduleButton.backgroundColor = UIColor.clear
+        createScheduleButton.alpha = 0
         createScheduleButton.isEnabled = false
         
-        timer = Timer.scheduledTimer(timeInterval: 0.5, target: self, selector: #selector(selectScheduleName), userInfo: nil, repeats: false)
-
+        timer = Timer.scheduledTimer(timeInterval: 0.6, target: self, selector: #selector(selectScheduleName), userInfo: nil, repeats: false)
+        
         
         for _ in 1...5 {
             textFieldsCompletion.append(false)
         }
-        
-        // Progress bar
-        progressBar.trackTintColor = UIColor.clear
-        progressBar.transform = progressBar.transform.scaledBy(x: 1, y: 20)
         
         
         // Date picker for schedule commencement
@@ -154,22 +117,10 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
         let flexButton = UIBarButtonItem(barButtonSystemItem: UIBarButtonSystemItem.flexibleSpace, target: self, action: nil)
         toolbar.setItems([todayButton, flexButton, doneButton], animated: true)
         scheduleCommencementTextField.inputAccessoryView = toolbar
-        
-        // Screen drag to the left/previous page
-        let screenDrag: UIScreenEdgePanGestureRecognizer = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(leftPan))
-        screenDrag.edges = .left
-        view.addGestureRecognizer(screenDrag)
-        
-        
-        /* Looks for single or multiple taps
-        let tap: UITapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(CreateMenuViewController.dismissKeyboard))
-        */
-        
-        // Prevents the taps from cancelling other commands
-        /*tap.cancelsTouchesInView = false
-        
-        view.addGestureRecognizer(tap)
-        */
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+
     }
 
     override func didReceiveMemoryWarning() {
@@ -177,15 +128,11 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
         // Dispose of any resources that can be recreated.
     }
     
-    func leftPan(_ gestureRecognizer: UIPanGestureRecognizer) {
-        
-        // NEED HELP HERE
-    }
-    
     func selectScheduleName() {
-        UIView.animate(withDuration: 0.45, animations: {
+        UIView.animate(withDuration: 0.5, animations: {
             self.scheduleNameTextField.becomeFirstResponder()
         })
+        progressBar.transform = progressBar.transform.scaledBy(x: 1, y: 20)
     }
     
     func textFieldDidChange(_ textField: UITextField) {
@@ -194,21 +141,20 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
         } else {
             textFieldsCompletion[textField.tag] = false
         }
-        var progressBarPercent = Float(0)
+        var progressTotal = Float(0)
         for index in 0...textFieldsCompletion.count - 1 {
             if(textFieldsCompletion[index]) {
-                progressBarPercent += 1
+                progressTotal += 1
             }
         }
-        progressBarPercent /= Float(textFieldsCompletion.count)
-        progressBar.animate(progress: progressBarPercent)
+        progressBar.animate(progress: progressTotal / Float(textFieldsCompletion.count))
         if(progressBar.progress == 1) {
             UIView.animate(withDuration: 0.5, animations: {
                 self.createScheduleButton.alpha = 1.0
             })
-            createScheduleButton.isEnabled = true
+            self.createScheduleButton.isEnabled = true
         } else {
-            createScheduleButton.isEnabled = false
+            self.createScheduleButton.isEnabled = false
             UIView.animate(withDuration: 0.5, animations: {
                 self.createScheduleButton.alpha = 0.0
             })
@@ -222,7 +168,6 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
         } else {
             // Not found, so move to continue
             if(createScheduleButton.isEnabled) {
-                textField.resignFirstResponder()
                 createScheduleButton.sendActions(for: UIControlEvents.touchUpInside)
             }
         }
@@ -230,34 +175,6 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
         return false
     }
     
-    
-    /*func textFieldDidEndEditing(_ textField: UITextField) {
-        if(textField.hasText) {
-            textFieldsCompletion[textField.tag] = true
-        } else {
-            textFieldsCompletion[textField.tag] = false
-        }
-        var progressBarPercent = Float(0)
-        for index in 0...textFieldsCompletion.count - 1 {
-            if(textFieldsCompletion[index]) {
-                progressBarPercent += 1
-            }
-        }
-        progressBarPercent /= Float(textFieldsCompletion.count)
-        progressBar.animate(progress: progressBarPercent)
-        if(progressBar.progress == 1) {
-            UIView.animate(withDuration: 1, animations: {
-                self.createScheduleButton.alpha = 1.0
-            })
-            createScheduleButton.isEnabled = true
-        } else {
-            UIView.animate(withDuration: 1, animations: {
-                self.createScheduleButton.alpha = 0.0
-            })
-            createScheduleButton.isEnabled = false
-        }
-    }
-    */
     
     // This function is called when a tap is recognized
     /*func dismissKeyboard() {
@@ -302,6 +219,34 @@ class CreateMenuViewController: UIViewController, UITextFieldDelegate {
         /*formatter.dateFormat = "EEEE"
         firstDayLabel.text = formatter.string(from: NSDate() as Date)
         */
+    }
+    
+    @IBAction func createScheduleButton(_ sender: UIButton){
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = DateFormatter.Style.full
+        let date = dateFormatter.date(from: scheduleCommencementTextField.text!)
+        let todayDate = dateFormatter.date(from: dateFormatter.string(from: NSDate() as Date))
+        if(date! < todayDate!) { // Ensures the date is in the future or today
+            errorLabel.text = "Date cannot be in the past"
+        } else if(schedulePasswordTextField.text != confirmPasswordTextField.text) {
+            errorLabel.text = "Passwords must match"
+        } else {
+            // TODO: Send information over to Firebase and check sync if someone else has sent the same request with the same ID
+            // If it fails, display error message
+            // Change success to fail
+            var success = true
+            if(!success) {
+                errorLabel.text = "Timetable ID is already taken"
+            } else {
+                // TODO: Fill view menu with data from timetable
+                if let viewController = UIStoryboard(name: "Main", bundle: nil).instantiateViewController(withIdentifier: "ViewMenuViewController") as? ViewMenuViewController {
+                    if let navigator = navigationController {
+                        navigator.popViewController(animated: false)
+                        navigator.pushViewController(viewController, animated: true)
+                    }
+                }
+            }
+        }
     }
     
     /*
